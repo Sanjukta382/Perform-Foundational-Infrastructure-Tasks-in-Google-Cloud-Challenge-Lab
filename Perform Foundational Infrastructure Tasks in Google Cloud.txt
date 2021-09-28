@@ -1,0 +1,139 @@
+Task 1: Create a bucket
+
+Use username 1 to sign in to your Google Cloud Console.
+Navigation Pane > Cloud Storage> Browser> Creat Bucket
+Use your Project Id provided along with the username and password on the task page to name your Bucket.
+Choose Loacation type to- Region > Select us-east1 from the dropdown.
+Leave rest of the settings at their default values.
+Create
+
+
+Task 2: Create a Pub/Sub topic
+
+Navigation Pane> Pub/Sub > Topics> Create Topic
+Put topic id as Jooli as given in the problem statement.
+Create Topic
+
+
+Task 3: Create the thumbnail Cloud Function
+
+Navigation Pane> Cloud FUnctions
+Name the fucntion as CFJooli
+Change Trigger to Cloud Storage from the drop down
+Set Event Type to Finalize/ Create
+Put the bucket name as the bucket name which you have put in Task 1 (which is your project ID) or you can directly click on browse to find your bucket name.
+Keep the rest at Default and click Save
+Click Next
+In the Fucntion to execute box, remove helloWorld and put thumbnail
+In the code window, in node.js 14 editor, copy the following code-
+/* globals exports, require */
+//jshint strict: false
+//jshint esversion: 6
+"use strict";
+const crc32 = require("fast-crc32c");
+const { Storage } = require('@google-cloud/storage');
+const gcs = new Storage();
+const { PubSub } = require('@google-cloud/pubsub');
+const imagemagick = require("imagemagick-stream");
+exports.thumbnail = (event, context) => {
+  const fileName = event.name;
+  const bucketName = event.bucket;
+  const size = "64x64"
+  const bucket = gcs.bucket(bucketName);
+  const topicName = "Jooli";
+  const pubsub = new PubSub();
+  if ( fileName.search("64x64_thumbnail") == -1 ){
+    // doesn't have a thumbnail, get the filename extension
+    var filename_split = fileName.split('.');
+    var filename_ext = filename_split[filename_split.length - 1];
+    var filename_without_ext = fileName.substring(0, fileName.length - filename_ext.length );
+    if (filename_ext.toLowerCase() == 'png' || filename_ext.toLowerCase() == 'jpg'){
+      // only support png and jpg at this point
+      console.log(`Processing Original: gs://${bucketName}/${fileName}`);
+      const gcsObject = bucket.file(fileName);
+      let newFilename = filename_without_ext + size + '_thumbnail.' + filename_ext;
+      let gcsNewObject = bucket.file(newFilename);
+      let srcStream = gcsObject.createReadStream();
+      let dstStream = gcsNewObject.createWriteStream();
+      let resize = imagemagick().resize(size).quality(90);
+      srcStream.pipe(resize).pipe(dstStream);
+      return new Promise((resolve, reject) => {
+        dstStream
+          .on("error", (err) => {
+            console.log(`Error: ${err}`);
+            reject(err);
+          })
+          .on("finish", () => {
+            console.log(`Success: ${fileName} → ${newFilename}`);
+              // set the content-type
+              gcsNewObject.setMetadata(
+              {
+                contentType: 'image/'+ filename_ext.toLowerCase()
+              }, function(err, apiResponse) {});
+              pubsub
+                .topic(topicName)
+                .publisher()
+                .publish(Buffer.from(newFilename))
+                .then(messageId => {
+                  console.log(`Message ${messageId} published.`);
+                })
+                .catch(err => {
+                  console.error('ERROR:', err);
+                });
+          });
+      });
+    }
+    else {
+      console.log(`gs://${bucketName}/${fileName} is not an image I can handle`);
+    }
+  }
+  else {
+    console.log(`gs://${bucketName}/${fileName} already has a thumbnail`);
+  }
+};
+
+Note: Make sure in Line 16, const topicName= "" should have the name of the topic you created in the previous task.
+
+In the package.json editor, copy the follwong code-
+{
+  "name": "thumbnails",
+  "version": "1.0.0",
+  "description": "Create Thumbnail of uploaded image",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^1.1.1",
+    "@google-cloud/pubsub": "^2.0.0",
+    "@google-cloud/storage": "^5.0.0",
+    "fast-crc32c": "1.0.4",
+    "imagemagick-stream": "4.1.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=4.3.2"
+  }
+}
+
+Click Deploy to create your Cloud Function.
+
+Copy the link given in the blue box above Check my Progress button of Task 3. Open the link in a new window and download the image.
+Navigation Pane> Cloud Storage> Browser> Click the bucket you created in Task 1 from given the list.
+Click Upload files and upload the image which you just downloaded.
+Click Refresh Bucket to see the list of files in your bucket. 
+
+
+Task 4: Remove the previous cloud engineer
+
+Navigation Pane> IAM & Admin> IAM
+Scroll down to find your second username in the list which has the Viewer access only.
+Note: Make sure to cross check the username you are removing with your username 2 given in the task page.
+Select the username and click on the pen icon at the end of the bar. 
+Once the Edit Permission window opens, Click the delete icon.
+Click Save
+
+
+
+
+
+
